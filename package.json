@@ -1,0 +1,12 @@
+{
+  "name": "munji-studio",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node serve.mjs",
+    "check": "node --check dist/photo-tools.js && node --check dist/app.js && node --check dist/export.js",
+    "standalone": "node build-standalone.mjs",
+    "test:handwriting": "node verify-handwriting.mjs"
+  }
+}
