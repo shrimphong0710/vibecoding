@@ -35,4 +35,12 @@ HWPX 구현 참고: [한컴 공식 HWPX 포맷 설명](https://tech.hancom.com/h
 
 ## 온라인 배포 상태
 
-Sites 프로젝트는 생성했지만, 제작 환경에서 git.chatgpt-team.site:443 연결이 차단되어 소스 푸시와 배포를 완료하지 못했습니다. 공개된 온라인 주소는 없습니다. 로컬 버전은 문지 스튜디오.html 파일을 브라우저에서 열어 바로 사용할 수 있습니다.
+GitHub에 소스를 푸시하는 것과 온라인 사이트 배포는 별도입니다. 현재 Sites 프로젝트는 생성되어 있지만 배포 버전은 없으며, 제작 환경에서 git.chatgpt-team.site:443 연결이 차단되어 있습니다.
+
+Render 배포용 `render.yaml`과 `serve-online.mjs`를 제공합니다. GitHub의 `main` 브랜치에서 Blueprint를 생성하면 `npm run check:online`으로 검사하고 `npm run start:online`으로 실행합니다. 별도 패키지 설치는 필요하지 않습니다. Render가 제공하는 HTTPS 주소를 필기 제거 API의 허용 주소로 사용하므로, 휴대폰에서도 같은 사이트의 필기 제거 기능을 사용할 수 있습니다.
+
+온라인 서버는 링크를 아는 누구나 로그인이나 비밀번호 없이 접속할 수 있습니다. 자체 도메인을 사용하는 경우 `MUNJI_PUBLIC_ORIGIN`을 실제 HTTPS 사이트 주소로 지정합니다. 배포 점검 경로는 `/healthz`이며, 로컬 서버 종료 기능은 온라인 서버에서 제공하지 않습니다.
+
+`node verify-online.mjs`는 비밀번호 없는 접속, 온라인 주소 검사, 필기 제거 요청, 정적 파일과 경로 보호를 검사하며 실제 CamScanner 서비스에 사진을 전송하지 않습니다. 저장된 문제지는 각 브라우저에 보관되며, 다른 기기로 옮기려면 `.munji` 프로젝트 저장/불러오기를 사용합니다.
+
+Render 계정 연결과 실제 배포가 완료되기 전에는 온라인 주소가 발급되지 않습니다. 로컬 버전은 기존 `Start-Munji.cmd` 또는 `문지 스튜디오.html`을 사용합니다.

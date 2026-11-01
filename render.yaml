@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: munji-studio
+    runtime: node
+    repo: https://github.com/shrimphong0710/vibecoding.git
+    branch: main
+    plan: free
+    buildCommand: npm run check:online
+    startCommand: npm run start:online
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22.x"

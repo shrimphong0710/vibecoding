@@ -60,12 +60,13 @@ async function readJson(req){
 }
 function send(res,status,data){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data))}
 export function createCamScannerHandler(options={}){
+  const allowedOrigin=options.allowedOrigin?new URL(options.allowedOrigin).origin:null;
   let busy=false;
   return async(req,res)=>{
     const pathname=new URL(req.url,'http://localhost').pathname;if(!pathname.startsWith('/api/camscanner/'))return false;
     try{
-      const expected='http://'+req.headers.host;
-      if(!['127.0.0.1','localhost','[::1]'].includes(new URL(expected).hostname)||req.headers.origin&&req.headers.origin!==expected)throw new ServiceError('문지 화면에서 다시 시도해 주세요.',403,'FORBIDDEN_ORIGIN');
+      const expected=allowedOrigin||'http://'+req.headers.host;
+      if((!allowedOrigin&&!['127.0.0.1','localhost','[::1]'].includes(new URL(expected).hostname))||(req.headers.origin&&req.headers.origin!==expected))throw new ServiceError('문지 화면에서 다시 시도해 주세요.',403,'FORBIDDEN_ORIGIN');
       if(req.method==='GET'&&pathname==='/api/camscanner/status'){send(res,200,{provider:'CamScanner',requiresApiKey:false,workflow:'upload-enhance-download',mode:9});return true}
       if(req.method==='GET'&&pathname==='/api/camscanner/connectivity'){send(res,200,await probeCamScanner(options));return true}
       if(req.method!=='POST'||pathname!=='/api/camscanner/erase'){send(res,404,{error:'NOT_FOUND'});return true}
