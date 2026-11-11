@@ -388,19 +388,94 @@ function syncEditorViewport(){
   $('#editor-zoom-fit').classList.toggle('active',editorAutoFit);$('#editor-zoom-fit').setAttribute('aria-pressed',String(editorAutoFit));
   if(ed.perspective)syncPerspectiveOverlay();
 }
-function resetEditorViewport(){editorZoom=1;editorAutoFit=true;const wrap=$('#editor-canvas-wrap');wrap.scrollLeft=wrap.scrollTop=0}
-function setEditorZoom(value){
+function resetEditorViewport(){resetEditorTouch();editorZoom=1;editorAutoFit=true;const wrap=$('#editor-canvas-wrap');wrap.scrollLeft=wrap.scrollTop=0}
+function editorViewportAnchor(clientX,clientY){
+  const rect=ec.getBoundingClientRect();return{x:Math.max(0,Math.min(1,(clientX-rect.left)/Math.max(1,rect.width))),y:Math.max(0,Math.min(1,(clientY-rect.top)/Math.max(1,rect.height)))};
+}
+function setEditorZoom(value,focus=null){
   if(!ed||!Number.isFinite(value))return;
-  const wrap=$('#editor-canvas-wrap'),surface=$('#editor-canvas-surface'),canvasRect=ec.getBoundingClientRect(),wrapRect=wrap.getBoundingClientRect();
-  const center={x:Math.max(0,Math.min(1,(wrapRect.left+wrap.clientWidth/2-canvasRect.left)/Math.max(1,canvasRect.width))),y:Math.max(0,Math.min(1,(wrapRect.top+wrap.clientHeight/2-canvasRect.top)/Math.max(1,canvasRect.height)))};
+  const wrap=$('#editor-canvas-wrap'),wrapRect=wrap.getBoundingClientRect(),clientX=Number.isFinite(focus?.clientX)?focus.clientX:wrapRect.left+wrap.clientWidth/2,clientY=Number.isFinite(focus?.clientY)?focus.clientY:wrapRect.top+wrap.clientHeight/2,anchor=focus?.anchor||editorViewportAnchor(clientX,clientY);
   editorAutoFit=false;editorZoom=Math.max(.05,Math.min(2,value));syncEditorViewport();
-  wrap.scrollLeft=Math.max(0,(surface.offsetLeft||20)+ec.width*editorZoom*center.x-wrap.clientWidth/2);wrap.scrollTop=Math.max(0,(surface.offsetTop||20)+ec.height*editorZoom*center.y-wrap.clientHeight/2);
+  const rect=ec.getBoundingClientRect();wrap.scrollLeft=Math.max(0,wrap.scrollLeft+rect.left+rect.width*anchor.x-clientX);wrap.scrollTop=Math.max(0,wrap.scrollTop+rect.top+rect.height*anchor.y-clientY);
 }
 $('#editor-zoom-out').onclick=()=>setEditorZoom(editorZoom/1.2);
 $('#editor-zoom-in').onclick=()=>setEditorZoom(editorZoom*1.2);
 $('#editor-zoom-range').oninput=event=>setEditorZoom(+event.target.value/100);
 $('#editor-zoom-actual').onclick=()=>setEditorZoom(1);
 $('#editor-zoom-fit').onclick=()=>{editorAutoFit=true;syncEditorViewport();$('#editor-canvas-wrap').scrollLeft=$('#editor-canvas-wrap').scrollTop=0};
+const editorViewport=$('#editor-canvas-wrap'),editorTouches=new Map();
+let editorTouchGesture=null,editorNativeGesture=null;
+editorViewport.style.touchAction='none';
+function consumeEditorGesture(event){if(event.cancelable!==false)event.preventDefault();event.stopImmediatePropagation?.()}
+function resetEditorTouch(){
+  for(const id of editorTouches.keys())try{editorViewport.releasePointerCapture(id)}catch{}
+  editorTouches.clear();editorTouchGesture=null;editorNativeGesture=null;
+}
+function cancelEditorTouchEdit(){
+  const gesture=editorTouchGesture;if(gesture?.kind!=='edit'||gesture.session!==ed)return;
+  ec.onpointercancel?.();drawEditorPixels(gesture.before);ed.history=gesture.history;ed.drag=false;ed.base=null;ed.brushBase=null;
+  if(gesture.text&&ed.textDraft){Object.assign(ed.textDraft,gesture.text);redrawTextDraft()}
+  if(gesture.points&&ed.perspective){ed.perspective.points=gesture.points;ed.perspective.drag=null;syncPerspectiveOverlay();schedulePerspectivePreview(true)}
+  syncEditorUndo();
+}
+function editorPinchGeometry(){
+  const [a,b]=[...editorTouches.values()];return{clientX:(a.clientX+b.clientX)/2,clientY:(a.clientY+b.clientY)/2,distance:Math.max(4,Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY))};
+}
+function beginEditorPinch(){
+  cancelEditorTouchEdit();editorNativeGesture=null;const point=editorPinchGeometry();
+  editorTouchGesture={kind:'pinch',session:ed,zoom:editorZoom,distance:point.distance,anchor:editorViewportAnchor(point.clientX,point.clientY)};
+  for(const id of editorTouches.keys())try{editorViewport.setPointerCapture(id)}catch{}
+}
+editorViewport.addEventListener('pointerdown',event=>{
+  if(!ed||event.pointerType!=='touch')return;
+  editorTouches.set(event.pointerId,{clientX:event.clientX,clientY:event.clientY});
+  if(editorTouches.size>1){beginEditorPinch();consumeEditorGesture(event);return}
+  const handle=event.target?.closest?.('.perspective-handle');
+  if(!handle&&(!ed.tool||ed.tool==='crop'||ed.remoteJob)){
+    editorTouchGesture={kind:'pan',session:ed,last:{clientX:event.clientX,clientY:event.clientY}};
+    try{editorViewport.setPointerCapture(event.pointerId)}catch{}consumeEditorGesture(event);
+  }else{
+    editorTouchGesture={kind:'edit',session:ed,before:ex.getImageData(0,0,ec.width,ec.height),history:ed.history.slice(),text:ed.textDraft?{x:ed.textDraft.x,y:ed.textDraft.y}:null,points:ed.perspective?.points.map(point=>({...point}))};
+  }
+},{capture:true,passive:false});
+editorViewport.addEventListener('pointermove',event=>{
+  if(event.pointerType!=='touch'||!editorTouches.has(event.pointerId))return;
+  editorTouches.set(event.pointerId,{clientX:event.clientX,clientY:event.clientY});
+  const gesture=editorTouchGesture;if(!gesture||gesture.session!==ed){resetEditorTouch();return}
+  if(editorTouches.size>1){
+    const point=editorPinchGeometry();setEditorZoom(gesture.zoom*point.distance/gesture.distance,{...point,anchor:gesture.anchor});consumeEditorGesture(event);
+  }else if(gesture.kind==='pan'){
+    editorViewport.scrollLeft=Math.max(0,editorViewport.scrollLeft+gesture.last.clientX-event.clientX);editorViewport.scrollTop=Math.max(0,editorViewport.scrollTop+gesture.last.clientY-event.clientY);
+    gesture.last={clientX:event.clientX,clientY:event.clientY};consumeEditorGesture(event);
+  }
+},{capture:true,passive:false});
+function endEditorTouch(event){
+  if(event.pointerType!=='touch'||!editorTouches.has(event.pointerId))return;
+  const handled=editorTouchGesture?.kind!=='edit'||event.type==='pointercancel';
+  if(event.type==='pointercancel')cancelEditorTouchEdit();editorTouches.delete(event.pointerId);
+  if(editorTouches.size>=2)beginEditorPinch();else if(editorTouches.size===1)editorTouchGesture={kind:'pan',session:ed,last:{...[...editorTouches.values()][0]}};else resetEditorTouch();
+  if(handled)consumeEditorGesture(event);
+}
+editorViewport.addEventListener('pointerup',endEditorTouch,{capture:true,passive:false});
+editorViewport.addEventListener('pointercancel',endEditorTouch,{capture:true,passive:false});
+editorViewport.addEventListener('wheel',event=>{
+  if(!ed||!event.ctrlKey||event.cancelable===false)return;
+  event.preventDefault();if(editorNativeGesture||editorTouches.size>1)return;
+  const unit=event.deltaMode===1?16:event.deltaMode===2?editorViewport.clientHeight:1,delta=Math.max(-100,Math.min(100,event.deltaY*unit));
+  setEditorZoom(editorZoom*Math.exp(-delta*.01),event);
+},{passive:false});
+editorViewport.addEventListener('gesturestart',event=>{
+  if(!ed||event.cancelable===false)return;event.preventDefault();if(editorTouches.size>1)return;
+  const rect=editorViewport.getBoundingClientRect(),clientX=Number.isFinite(event.clientX)?event.clientX:rect.left+editorViewport.clientWidth/2,clientY=Number.isFinite(event.clientY)?event.clientY:rect.top+editorViewport.clientHeight/2;
+  editorNativeGesture={session:ed,zoom:editorZoom,scale:Math.max(.01,Number(event.scale)||1),clientX,clientY,anchor:editorViewportAnchor(clientX,clientY)};
+},{passive:false});
+editorViewport.addEventListener('gesturechange',event=>{
+  if(!ed||event.cancelable===false)return;event.preventDefault();const gesture=editorNativeGesture;
+  if(!gesture||gesture.session!==ed||editorTouches.size>1||!Number.isFinite(event.scale)||event.scale<=0)return;
+  setEditorZoom(gesture.zoom*event.scale/gesture.scale,{...gesture,clientX:Number.isFinite(event.clientX)?event.clientX:gesture.clientX,clientY:Number.isFinite(event.clientY)?event.clientY:gesture.clientY});
+},{passive:false});
+editorViewport.addEventListener('gestureend',event=>{if(editorNativeGesture&&event.cancelable!==false)event.preventDefault();editorNativeGesture=null},{passive:false});
+$('#editor-dialog').addEventListener('close',resetEditorTouch);
 function ensurePerspectivePreview(){
   let panel=$('#perspective-live-preview');if(panel)return panel;
   panel=document.createElement('aside');panel.id='perspective-live-preview';panel.className='perspective-live-preview';panel.hidden=true;panel.setAttribute('aria-label','실시간 원근 보정 미리보기');
