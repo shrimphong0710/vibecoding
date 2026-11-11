@@ -17,6 +17,13 @@
 .bulk-preview-strip img{min-width:0;flex:1;object-fit:cover;border:1px solid #dfe7d8;border-radius:4px;background:#fff}
 .bulk-preview-strip span{width:30px;display:flex;align-items:center;justify-content:center;background:#edf3e8;border-radius:4px;color:#607a57;font-weight:700}
 .bulk-stars{padding:4px 0}
+.bulk-photo-tools h4{margin-bottom:6px}
+.bulk-filter-grid{margin:12px 0 9px}
+.bulk-filter-grid button{justify-content:flex-start;padding-left:9px}
+.bulk-filter-grid button:disabled{opacity:.45;cursor:wait}
+.bulk-handwriting{margin-top:4px}
+#bulk-correction-stop{margin-top:7px}
+.bulk-correction-status{min-height:33px;margin:10px 0 0;padding:9px 10px;border-radius:6px;background:#f2f6ed;color:#6e825f;font-size:8px;line-height:1.7}
 .bulk-controls .range-label{margin-top:18px}
 .bulk-note{margin:17px 0;padding:10px;border-radius:6px;background:#f4f6f0;color:#8f9888;font-size:8px;line-height:1.7}
 .bulk-controls #clear-selection{margin-top:4px}
