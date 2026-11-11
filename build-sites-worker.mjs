@@ -35,6 +35,7 @@ async function limitedBytes(response,limit){
   const result=new Uint8Array(total);let offset=0;for(const chunk of chunks){result.set(chunk,offset);offset+=chunk.length}return result;
 }
 async function requireSuccess(response){
+  if(response.status>=300&&response.status<400)throw new ServiceError('CamScanner 연결 주소가 변경되어 요청을 처리하지 못했어요.',502,'UNEXPECTED_REDIRECT');
   if(response.status===401||response.status===403)throw new ServiceError('CamScanner에서 인증을 요구했습니다. 현재 공개 연동을 사용할 수 없어요.',502,'CAMSCANNER_AUTH_REQUIRED');
   if(response.status===429)throw new ServiceError('CamScanner 이용 한도 또는 요청 제한에 도달했어요. 잠시 뒤 다시 시도해 주세요.',429,'RATE_LIMITED');
   if(!response.ok)throw new ServiceError('CamScanner 서버가 요청을 처리하지 못했어요. 원본은 유지됩니다.');
@@ -44,7 +45,7 @@ async function fileId(response){
   const id=body.tool_result?.data?.file_id;if(body.code!==200||body.tool_result?.success!==true||typeof id!=='string'||!id||id.length>2048)throw new ServiceError('CamScanner에서 사진을 처리하지 못했어요. 원본은 유지됩니다.');return id;
 }
 async function eraseWithCamScanner(image,signal){
-  const bytes=decodeImage(image),post=(tool,options)=>fetch(CAMSCANNER_ORIGIN+'/v1/tools/'+tool,{method:'POST',...options,signal,redirect:'error'});
+  const bytes=decodeImage(image),post=(tool,options)=>fetch(CAMSCANNER_ORIGIN+'/v1/tools/'+tool,{method:'POST',...options,signal,redirect:'manual'});
   let input,output,response;
   try{
     input=await fileId(await post('upload_file/execute',{headers:{'Content-Type':'application/octet-stream'},body:bytes}));
