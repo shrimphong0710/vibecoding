@@ -11,7 +11,7 @@
     "test:online": "node verify-online.mjs",
     "standalone": "node build-standalone.mjs",
     "test:handwriting": "node verify-handwriting.mjs",
-    "test:ratio": "node build-sites-worker.mjs && node verify-auto-straighten.mjs && node verify-bulk-viewport.mjs && node verify-preview-gestures.mjs",
+    "test:ratio": "node build-sites-worker.mjs && node verify-auto-straighten.mjs && node verify-bulk-viewport.mjs && node verify-preview-gestures.mjs && node verify-a4-gestures.mjs",
     "test:ratio:live": "node verify-auto-straighten-live.mjs"
   }
 }

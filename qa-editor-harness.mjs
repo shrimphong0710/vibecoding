@@ -7,7 +7,7 @@ const require=createRequire(path.resolve(path.dirname(process.execPath),'..','no
 export const {createCanvas,Image,ImageData}=require('@napi-rs/canvas');
 
 export async function editorHarness(){
-  const elements=new Map(),listeners=new Map(),observers=[];
+  const elements=new Map(),listeners=new Map(),observers=[],selectorOverrides=new Map();
   function element(id){
     if(elements.has(id))return elements.get(id);
     const el=id.includes('canvas')&&!id.includes('wrap')&&!id.includes('stage')?createCanvas(500,500):{};
@@ -24,7 +24,7 @@ export async function editorHarness(){
   const views=['before','result'].map(view=>{const el=element('straighten-'+view);el.dataset.straightenView=view;return el});
   const cleanViews=['before','result'].map(view=>{const el=element('clean-view-'+view);el.dataset.cleanView=view;return el});
   const scopes=['area','all'].map(scope=>{const el=element('clean-scope-'+scope);el.dataset.cleanScope=scope;return el});
-  const document={querySelector:s=>element(s.startsWith('#')?s.slice(1):s),querySelectorAll:s=>({'[data-filter]':filters,'[data-straighten-view]':views,'[data-clean-view]':cleanViews,'[data-clean-scope]':scopes}[s]||[]),
+  const document={querySelector:s=>element(s.startsWith('#')?s.slice(1):s),querySelectorAll:s=>selectorOverrides.get(s)||({'[data-filter]':filters,'[data-straighten-view]':views,'[data-clean-view]':cleanViews,'[data-clean-scope]':scopes}[s]||[]),
     createElement:tag=>tag==='canvas'?createCanvas(10,10):element('created-'+elements.size),fonts:{ready:Promise.resolve()},addEventListener(){},body:{append(){}}};
   const ctx={document,window:{addEventListener(){}},Image,ImageData,crypto:globalThis.crypto,TextEncoder,Uint8Array,Uint8ClampedArray,Float32Array,Float64Array,DataView,Blob,URL,performance,console,setTimeout,clearTimeout,atob,btoa,Math,Date,Promise,AbortController,DOMException,
     location:{protocol:'http:'},ResizeObserver:class{constructor(callback){observers.push(callback)}observe(){}},requestAnimationFrame:fn=>setTimeout(fn,0),indexedDB:{open(){throw Error('isolated test storage')}}};
@@ -33,5 +33,5 @@ export async function editorHarness(){
   const run=code=>vm.runInContext(code,ctx);
   await new Promise(r=>setTimeout(r,50));
   const fire=async(id,type,event)=>{for(const fn of listeners.get(id+':'+type)||[])await fn(event)};
-  return{ctx,element,elements,filters,run,fire,resize:()=>observers.forEach(callback=>callback()),M:ctx.window.Munji,canvas:element('editor-canvas')};
+  return{ctx,element,elements,filters,run,fire,setSelector:(selector,items)=>selectorOverrides.set(selector,items),resize:()=>observers.forEach(callback=>callback()),M:ctx.window.Munji,canvas:element('editor-canvas')};
 }
