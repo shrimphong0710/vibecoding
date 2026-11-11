@@ -20,7 +20,7 @@ export async function editorHarness(){
       click(){return this.onclick?.({target:this})},append(){},remove(){},focus(){},scrollIntoView(){},setPointerCapture(){},releasePointerCapture(){},hasPointerCapture(){return true}
     });elements.set(id,el);return el;
   }
-  const filters=['original','bw','eco','sharpen','shadow','denoise'].map(filter=>{const el=element('filter-'+filter);el.dataset.filter=filter;return el});
+  const filters=['original','bw','eco','sharpen','shadow'].map(filter=>{const el=element('filter-'+filter);el.dataset.filter=filter;return el});
   const views=['before','result'].map(view=>{const el=element('straighten-'+view);el.dataset.straightenView=view;return el});
   const cleanViews=['before','result'].map(view=>{const el=element('clean-view-'+view);el.dataset.cleanView=view;return el});
   const scopes=['area','all'].map(scope=>{const el=element('clean-scope-'+scope);el.dataset.cleanScope=scope;return el});

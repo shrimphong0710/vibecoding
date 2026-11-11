@@ -73,3 +73,4 @@
 .text-color-controls #photo-text-color{width:36px;height:30px;padding:2px;border:1px solid #dbe4cf;border-radius:4px;background:#fff;flex:none}
 .text-color-controls #photo-text-color-hex{width:85px;font-size:11px;flex:none}.text-color-controls .text-check{font-size:10px;white-space:nowrap}
 .text-box-dimensions{margin-top:13px}
+#apply-adjust{white-space:normal;text-align:left}
