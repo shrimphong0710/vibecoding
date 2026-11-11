@@ -29,3 +29,12 @@
 .bulk-controls #clear-selection{margin-top:4px}
 .bulk-controls .delete-button{margin-top:8px}
 @media(max-width:600px){.selection-status{margin-left:12px;margin-right:12px}.question-select{width:18px;height:18px}}
+.auto-straighten-section{background:linear-gradient(145deg,#f2f7ef,#fff)}
+.auto-straighten-section .photo-section-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.auto-straighten-section h3{margin:0}
+.auto-straighten-section .mini-tag{background:#e2ecd9;color:#537345}
+.auto-straighten-status{min-height:36px;line-height:1.7!important}
+.auto-straighten-status.is-error{color:#a55239}
+.auto-straighten-section .segmented{margin:10px 0}
+#auto-straighten-stop,#auto-straighten-manual{margin-top:8px}
+.auto-straighten-privacy{margin:12px 0 0;color:#88917f;font-size:9px;line-height:1.7}

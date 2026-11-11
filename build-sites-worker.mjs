@@ -44,39 +44,41 @@ async function fileId(response){
   await requireSuccess(response);let body;try{body=JSON.parse(new TextDecoder().decode(await limitedBytes(response,1024*1024)))}catch(error){if(error instanceof ServiceError)throw error;throw new ServiceError('필기 제거 응답을 읽지 못했어요.')}
   const id=body.tool_result?.data?.file_id;if(body.code!==200||body.tool_result?.success!==true||typeof id!=='string'||!id||id.length>2048)throw new ServiceError('필기를 제거하지 못했어요. 원본은 유지됩니다.');return id;
 }
-async function eraseWithCamScanner(image,signal){
+async function eraseWithCamScanner(image,signal,straighten=false){
   const bytes=decodeImage(image),post=(tool,options)=>fetch(CAMSCANNER_ORIGIN+'/v1/tools/'+tool,{method:'POST',...options,signal,redirect:'manual'});
   let input,output,response;
   try{
     input=await fileId(await post('upload_file/execute',{headers:{'Content-Type':'application/octet-stream'},body:bytes}));
-    output=await fileId(await post('enhance_image/execute',{headers:{'Content-Type':'application/json'},body:JSON.stringify({file_id:input,enhance_mode:9,output_mode:'file_id'})}));
+    const tool=straighten?'image_hd/execute':'enhance_image/execute',parameters=straighten?{file_id:input}:{file_id:input,enhance_mode:9,output_mode:'file_id'};
+    output=await fileId(await post(tool,{headers:{'Content-Type':'application/json'},body:JSON.stringify(parameters)}));
     response=await post('download_file/execute?response_mode=raw',{headers:{'Content-Type':'application/json'},body:JSON.stringify({file_id:output})});await requireSuccess(response);
   }catch(error){if(error instanceof ServiceError)throw error;console.error('Handwriting removal fetch failed',error?.name,error?.message,error?.cause?.message);if(signal.aborted)throw new ServiceError('필기 제거 시간이 초과됐어요. 원본은 유지됩니다.',504,'TIMEOUT');throw new ServiceError('필기 제거 기능에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.',502,'CONNECTION_FAILED')}
   const result=await limitedBytes(response,20*1024*1024),mime=mimeOf(result);if(!mime)throw new ServiceError('유효한 필기 제거 결과를 받지 못했어요.');
-  return{image:'data:'+mime+';base64,'+encodeBase64(result),provider:'handwriting-removal'};
+  return{image:'data:'+mime+';base64,'+encodeBase64(result),provider:straighten?'CamScanner':'handwriting-removal'};
 }
 async function handleApi(request,url){
+  const straighten=url.pathname==='/api/photo-correction/straighten';
   if(request.method==='GET'&&url.pathname==='/api/handwriting-removal/status')return json(200,{provider:'handwriting-removal',requiresApiKey:false,workflow:'upload-enhance-download',mode:9});
   if(request.method==='GET'&&url.pathname==='/api/handwriting-removal/connectivity'){
     try{const response=await fetch(CAMSCANNER_ORIGIN,{method:'HEAD'});return json(200,{reachable:true,httpStatus:response.status})}catch(error){console.error('Handwriting removal connectivity failed',error?.name,error?.message,error?.cause?.message);return json(502,{reachable:false,error:error?.name,message:error?.message,cause:error?.cause?.message})}
   }
-  if(request.method!=='POST'||url.pathname!=='/api/handwriting-removal/erase')return json(404,{error:'NOT_FOUND'});
+  if(request.method!=='POST'||(!straighten&&url.pathname!=='/api/handwriting-removal/erase'))return json(404,{error:'NOT_FOUND'});
   if(request.headers.get('Origin')!==url.origin)throw new ServiceError('문지 화면에서 다시 시도해 주세요.',403,'FORBIDDEN_ORIGIN');
   if(busy)throw new ServiceError('이전 사진을 처리 중이에요. 완료된 뒤 다시 시도해 주세요.',409,'BUSY');
   if(!String(request.headers.get('content-type')||'').startsWith('application/json'))throw new ServiceError('요청 형식이 올바르지 않습니다.',415,'INVALID_REQUEST');
   if(Number(request.headers.get('content-length')||0)>Math.ceil(MAX_IMAGE*4/3)+2048)throw new ServiceError('사진 용량이 너무 큽니다.',413,'IMAGE_TOO_LARGE');
-  busy=true;try{const body=await request.json(),timeout=AbortSignal.timeout(120000),signal=AbortSignal.any([request.signal,timeout]);return json(200,await eraseWithCamScanner(body.image,signal))}finally{busy=false}
+  busy=true;try{let body;try{body=await request.json()}catch{throw new ServiceError('요청 내용을 읽지 못했어요.',400,'INVALID_REQUEST')}const timeout=AbortSignal.timeout(120000),signal=AbortSignal.any([request.signal,timeout]);return json(200,await eraseWithCamScanner(body.image,signal,straighten))}finally{busy=false}
 }
 export default{
   async fetch(request){
     const url=new URL(request.url);
     try{
-      if(url.pathname.startsWith('/api/handwriting-removal/'))return await handleApi(request,url);
+      if(url.pathname.startsWith('/api/handwriting-removal/')||url.pathname.startsWith('/api/photo-correction/'))return await handleApi(request,url);
       if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405,headers:{Allow:'GET, HEAD'}});
       const key=url.pathname==='/'?'/index.html':url.pathname,body=ASSETS[key];if(body===undefined)return new Response('Not found',{status:404});
       const extension=key.slice(key.lastIndexOf('.')),headers={'Content-Type':TYPES[extension]||'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
       return new Response(request.method==='HEAD'?null:body,{status:200,headers});
-    }catch(error){return json(error instanceof ServiceError?error.status:500,{error:error instanceof ServiceError?error.code:'INTERNAL_ERROR',message:error instanceof ServiceError?error.message:'필기 제거에 실패했어요. 원본은 유지됩니다.'})}
+    }catch(error){const message=error instanceof ServiceError?error.message:'사진 보정에 실패했어요. 원본은 유지됩니다.';return json(error instanceof ServiceError?error.status:500,{error:error instanceof ServiceError?error.code:'INTERNAL_ERROR',message:url.pathname==='/api/photo-correction/straighten'?message.replace(/필기 제거/g,'비율 자동 조정'):message})}
   }
 };
 `;

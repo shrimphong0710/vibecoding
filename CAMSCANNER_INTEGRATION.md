@@ -1,5 +1,13 @@
 # CamScanner 필기 제거 연결
 
+## 비율 자동 조정
+
+사진 보정창의 **비율 자동 조정**은 [공식 image_hd HTTP 연동](https://github.com/CS-CamScanner/CamScanner-skills/blob/main/skills/camscanner-image-hd/SKILL.md)을 사용합니다. 원본 업로드 → `image_hd/execute`에 `file_id` 전달 → 결과 다운로드 순서이며, 별도 `hd_mode`를 보내지 않습니다. 자동 문서 자르기와 문서 보정, 선명도 처리가 함께 수행됩니다. 새로운 자르기 결과는 입력과 가로세로 비율이 달라도 허용하며, 화면에 결과를 표시하기 전에 유효한 이미지인지 검사합니다.
+
+로컬 Node·Render와 Sites Worker에서 `/api/photo-correction/straighten`을 제공합니다. 사진은 CamScanner 서버로 전송됩니다. 조정 전·후 비교, 보정 결과 저장, 수동 자르기·기울기 조절, 실행 취소·원본 복원과 처리 중단을 지원합니다. 실패·취소 시 현재 사진을 유지하고, 보정창을 닫거나 다른 사진을 열면 이전 결과를 반영하지 않습니다. 같은 사진을 중복 요청하지 않으며 필기 제거와 서버 처리 제한을 공유합니다.
+
+`verify-auto-straighten.mjs`는 대체 서비스로 요청과 편집 동작을 검사합니다. `verify-auto-straighten-live.mjs`는 생성한 검증용 문제지만 실제 외부 서비스로 전송합니다. 실제 처리 결과는 `qa/auto-straighten/report.json`의 `success`와 전후 이미지를 함께 확인합니다.
+
 문지의 기본 **필기 제거** 버튼은 CamScanner 서버에 사진을 보내 처리하고, 반환된 사진을 편집 화면에 바로 적용합니다. 후보별 체크, 미리보기, 별도 결과 확정 단계가 없습니다. 처리 뒤 ‘제거 전 / 제거 후’로 비교할 수 있으며, 제거 전을 보고 있어도 저장하거나 다른 편집을 시작하면 제거 후 결과를 사용합니다. 실행 취소로 되돌릴 수 있습니다. API 토큰 입력 화면은 없으며, 실패하면 입력 사진을 유지하고 로컬 필터로 대체하지 않습니다.
 
 ## 공식 공개 연동

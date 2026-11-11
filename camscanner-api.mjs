@@ -36,22 +36,26 @@ async function fileId(response){
   if(body.code!==200||body.tool_result?.success!==true||typeof id!=='string'||!id||id.length>2048)throw new ServiceError('CamScanner에서 사진을 처리하지 못했어요. 원본은 유지됩니다.');
   return id;
 }
-export async function eraseWithCamScanner(image,{fetchImpl=globalThis.fetch,signal=new AbortController().signal,timeoutMs=120000}={}){
+async function processWithCamScanner(image,{fetchImpl=globalThis.fetch,signal=new AbortController().signal,timeoutMs=120000,straighten=false}={}){
   const bytes=imageBytes(image),requestSignal=AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]);
   const post=(tool,options)=>fetchImpl(CAMSCANNER_ORIGIN+'/v1/tools/'+tool,{method:'POST',...options,signal:requestSignal,redirect:'error'});
   try{
     const input=await fileId(await post('upload_file/execute',{headers:{'Content-Type':'application/octet-stream'},body:bytes}));
-    const output=await fileId(await post('enhance_image/execute',{headers:{'Content-Type':'application/json'},body:JSON.stringify({file_id:input,enhance_mode:9,output_mode:'file_id'})}));
+    const tool=straighten?'image_hd/execute':'enhance_image/execute';
+    const parameters=straighten?{file_id:input}:{file_id:input,enhance_mode:9,output_mode:'file_id'};
+    const output=await fileId(await post(tool,{headers:{'Content-Type':'application/json'},body:JSON.stringify(parameters)}));
     const response=await post('download_file/execute?response_mode=raw',{headers:{'Content-Type':'application/json'},body:JSON.stringify({file_id:output})});await requireSuccess(response);
     const result=await limitedBytes(response,30*1024*1024),mime=imageMime(result);if(!mime)throw new ServiceError('CamScanner가 유효한 결과 사진을 반환하지 않았어요.');
     return{image:'data:'+mime+';base64,'+result.toString('base64'),provider:'CamScanner'};
   }catch(error){
-    if(signal.aborted)throw new ServiceError('필기 제거를 취소했어요.',499,'CANCELLED');
+    if(signal.aborted)throw new ServiceError(straighten?'비율 자동 조정을 취소했어요.':'필기 제거를 취소했어요.',499,'CANCELLED');
     if(requestSignal.aborted)throw new ServiceError('CamScanner 처리 시간이 초과됐어요. 원본은 유지됩니다.',504,'TIMEOUT');
     if(error instanceof ServiceError)throw error;
     throw networkFailure(error);
   }
 }
+export function eraseWithCamScanner(image,options={}){return processWithCamScanner(image,{...options,straighten:false})}
+export function straightenWithCamScanner(image,options={}){return processWithCamScanner(image,{...options,straighten:true})}
 async function readJson(req){
   if(!String(req.headers['content-type']||'').startsWith('application/json'))throw new ServiceError('요청 형식이 올바르지 않습니다.',415,'INVALID_REQUEST');
   if(Number(req.headers['content-length']||0)>MAX_BODY)throw new ServiceError('사진 용량이 너무 큽니다.',413,'IMAGE_TOO_LARGE');
@@ -63,18 +67,21 @@ export function createCamScannerHandler(options={}){
   const allowedOrigin=options.allowedOrigin?new URL(options.allowedOrigin).origin:null;
   let busy=false;
   return async(req,res)=>{
-    const pathname=new URL(req.url,'http://localhost').pathname;if(!pathname.startsWith('/api/camscanner/'))return false;
+    const requestedPath=new URL(req.url,'http://localhost').pathname;
+    const straighten=requestedPath==='/api/photo-correction/straighten';
+    const pathname=requestedPath.replace(/^\/api\/handwriting-removal\//,'/api/camscanner/');
+    if(!straighten&&!pathname.startsWith('/api/camscanner/'))return false;
     try{
       const expected=allowedOrigin||'http://'+req.headers.host;
       if((!allowedOrigin&&!['127.0.0.1','localhost','[::1]'].includes(new URL(expected).hostname))||(req.headers.origin&&req.headers.origin!==expected))throw new ServiceError('문지 화면에서 다시 시도해 주세요.',403,'FORBIDDEN_ORIGIN');
       if(req.method==='GET'&&pathname==='/api/camscanner/status'){send(res,200,{provider:'CamScanner',requiresApiKey:false,workflow:'upload-enhance-download',mode:9});return true}
       if(req.method==='GET'&&pathname==='/api/camscanner/connectivity'){send(res,200,await probeCamScanner(options));return true}
-      if(req.method!=='POST'||pathname!=='/api/camscanner/erase'){send(res,404,{error:'NOT_FOUND'});return true}
+      if(req.method!=='POST'||(!straighten&&pathname!=='/api/camscanner/erase')){send(res,404,{error:'NOT_FOUND'});return true}
       if(req.headers.origin!==expected)throw new ServiceError('문지 화면에서 다시 시도해 주세요.',403,'FORBIDDEN_ORIGIN');
       if(busy)throw new ServiceError('이전 사진을 처리 중이에요. 완료된 뒤 다시 시도해 주세요.',409,'BUSY');
       busy=true;const controller=new AbortController(),cancel=()=>{if(!res.writableEnded)controller.abort()};res.on('close',cancel);
-      try{const body=await readJson(req),result=await eraseWithCamScanner(body.image,{...options,signal:controller.signal});if(!res.destroyed)send(res,200,result)}finally{busy=false;res.off('close',cancel)}
-    }catch(error){if(!res.destroyed&&!res.headersSent)send(res,error instanceof ServiceError?error.status:500,{error:error instanceof ServiceError?error.code:'INTERNAL_ERROR',message:error instanceof ServiceError?error.message:'필기 제거에 실패했어요. 원본은 유지됩니다.'})}
+      try{const body=await readJson(req),processImage=straighten?straightenWithCamScanner:eraseWithCamScanner,result=await processImage(body.image,{...options,signal:controller.signal});if(!res.destroyed)send(res,200,result)}finally{busy=false;res.off('close',cancel)}
+    }catch(error){const message=error instanceof ServiceError?error.message:'사진 보정에 실패했어요. 원본은 유지됩니다.';if(!res.destroyed&&!res.headersSent)send(res,error instanceof ServiceError?error.status:500,{error:error instanceof ServiceError?error.code:'INTERNAL_ERROR',message:straighten?message.replace(/필기 제거/g,'비율 자동 조정'):message})}
     return true;
   };
 }

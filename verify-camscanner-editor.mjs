@@ -13,7 +13,7 @@ export async function verifyCamScannerEditor({ctx,element,M,createCanvas}){
   const localAnalyze=ctx.window.MunjiPhoto.analyzeHandwriting;
   ctx.window.MunjiPhoto.analyzeHandwriting=()=>{throw Error('Automatic removal must use the external provider')};
   ctx.fetch=async(route,options)=>{
-    assert.equal(route,'/api/camscanner/erase');calls++;
+    assert.equal(route,'/api/handwriting-removal/erase');calls++;
     assert.equal(options.method,'POST');lastUpload=await M.loadImage(JSON.parse(options.body).image);
     if(mode==='slow'||mode==='stale')await new Promise((resolve,reject)=>{release=resolve;if(mode==='slow')options.signal.addEventListener('abort',()=>reject(new DOMException('Abort','AbortError')),{once:true})});
     const output=createCanvas(lastUpload.width,lastUpload.height),ox=output.getContext('2d');

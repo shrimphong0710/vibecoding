@@ -223,21 +223,22 @@ function syncCleanupUI(){
   $$('[data-clean-scope]').forEach(b=>{b.classList.toggle('active',b.dataset.cleanScope===c.scope);b.disabled=busy});
   $$('[data-clean-view]').forEach(b=>{const active=b.dataset.cleanView===(p?.view||'result');b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));b.disabled=busy});
   $('#cleanup-run').disabled=busy||(c.scope==='area'&&!c.rect);
-  $('#cleanup-run').textContent=busy?'필기 제거 중…':'필기 제거';
-  $('#cleanup-stop').hidden=!busy;
+  $('#cleanup-run').textContent=busy&&ed.remoteJob.kind!=='straighten'?'필기 제거 중…':'필기 제거';
+  $('#cleanup-stop').hidden=!busy||ed.remoteJob.kind==='straighten';
   $('#cleanup-comparison').hidden=!p;
   $('#cleanup-select').hidden=c.scope!=='area';
   $('#cleanup-select').disabled=busy;
   $('#cleanup-select').innerHTML=icon('crop')+(c.rect?'지울 영역 다시 지정':'지울 영역 지정하기');
   $('#cleanup-protect-select').disabled=$('#cleanup-protect-clear').disabled=busy;
   $('#cleanup-protection-count').textContent='추가 보호 영역 '+(c.protectionRects?.length||0)+'개';
-  $('#cleanup-status').textContent=busy?'필기를 제거하고 있어요.':ed.cleanupMessage||(c.scope==='area'&&!c.rect?'사진에서 지울 영역을 지정해 주세요.':'버튼을 누르면 필기를 자동으로 제거해요.');
+  $('#cleanup-status').textContent=busy?(ed.remoteJob.kind==='straighten'?'비율 자동 조정을 마친 뒤 필기를 제거할 수 있어요.':'필기를 제거하고 있어요.'):ed.cleanupMessage||(c.scope==='area'&&!c.rect?'사진에서 지울 영역을 지정해 주세요.':'버튼을 누르면 필기를 자동으로 제거해요.');
   $('#cleanup-status').classList.toggle('is-error',!!ed.cleanupError);
   $('#editor-apply').disabled=busy;
   ec.setAttribute('aria-busy',String(busy));
   syncEditorUndo();
+  syncStraightenUI();
 }
-function resetCleanupGeometry(){clearEditorGuide();ed.cleanup.rect=null;ed.cleanup.protectionRects=[];ed.cleanupComparison=null;ed.cleanupMessage='';ed.cleanupError=false;syncCleanupUI()}
+function resetCleanupGeometry(){clearEditorGuide();ed.cleanup.rect=null;ed.cleanup.protectionRects=[];ed.cleanupComparison=null;ed.cleanupMessage='';ed.cleanupError=false;ed.straightenComparison=null;ed.straightenMessage='';ed.straightenError=false;syncCleanupUI()}
 function textDraftOptions(){return{text:$('#photo-text').value,size:+$('#photo-text-size').value,color:$('#photo-text-color').value,bold:$('#photo-text-bold').checked,background:$('#photo-text-background').checked}}
 function redrawTextDraft(){const d=ed?.textDraft;if(!d)return;Object.assign(d,textDraftOptions());ex.putImageData(d.base,0,0);const layout=photoTools.layoutText(ex,d,{width:ec.width,height:ec.height});d.x=layout.x;d.y=layout.y;d.layout=layout;photoTools.drawText(ex,d,layout);if(d.text.trim()){ex.save();ex.strokeStyle=layout.fits?'#6f9651':'#ba745c';ex.lineWidth=Math.max(1,ec.width/ec.getBoundingClientRect().width);ex.setLineDash([5*ex.lineWidth,4*ex.lineWidth]);ex.strokeRect(layout.x,layout.y,layout.width,layout.height);ex.restore()}$('#photo-text-size-value').textContent=d.size+' px';$('#text-commit').disabled=!layout.fits;$('#text-draft-status').textContent=!d.text.trim()?'내용을 입력한 뒤 사진을 클릭해 위치를 정하세요.':!layout.fits?'텍스트가 사진보다 커요. 글자 크기나 내용을 줄여 주세요.':'사진을 클릭하거나 글상자를 끌어 위치를 바꿀 수 있어요.';$('#text-draft-status').classList.toggle('is-error',!!d.text.trim()&&!layout.fits);syncEditorUndo()}
 function discardTextDraft(){if(ed?.textDraft){ex.putImageData(ed.textDraft.base,0,0);ed.textDraft=null}syncEditorUndo()}
@@ -255,12 +256,66 @@ function finishPendingEdits(){
   if(!ed||ed.remoteJob)return false;
   if(ed.perspective)cancelPerspective({silent:true});
   if(!commitTextDraft())return false;
-  clearEditorGuide();restoreCleanupResult();return true;
+  clearEditorGuide();restoreCleanupResult();restoreStraightenResult();return true;
 }
+function drawEditorPixels(image){ec.width=image.width;ec.height=image.height;ex.putImageData(image,0,0)}
+function syncStraightenUI(){
+  if(!ed)return;
+  const busy=!!ed.remoteJob,working=ed.remoteJob?.kind==='straighten',comparison=ed.straightenComparison;
+  $('#auto-straighten').disabled=busy;
+  $('#auto-straighten').innerHTML=icon('sparkles')+(working?'비율 자동 조정 중…':'비율 자동 조정');
+  $('#auto-straighten-stop').hidden=!working;
+  $('#auto-straighten-comparison').hidden=!comparison;
+  $('#auto-straighten-manual').hidden=!comparison;
+  $('#auto-straighten-manual').disabled=busy;
+  $('#auto-straighten-status').textContent=working?'사진의 문서 영역과 기울기를 분석하고 있어요…':ed.straightenMessage||'문서 영역을 자동으로 자르고 기울어진 사진을 반듯하게 맞춰요.';
+  $('#auto-straighten-status').classList.toggle('is-error',!!ed.straightenError);
+  $$('[data-straighten-view]').forEach(button=>{button.disabled=busy;const active=button.dataset.straightenView===(comparison?.view||'result');button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active))});
+}
+function restoreStraightenResult(){const comparison=ed?.straightenComparison;if(comparison){drawEditorPixels(comparison.after);comparison.view='result';syncStraightenUI()}}
+function showStraightenComparison(view){
+  const comparison=ed?.straightenComparison;if(!comparison||ed.remoteJob)return;
+  if(ed.perspective)cancelPerspective({silent:true});
+  comparison.view=view==='before'?'before':'result';drawEditorPixels(comparison.view==='before'?comparison.before:comparison.after);syncStraightenUI();
+}
+async function requestStraightenedImage(image,signal){
+  const response=await fetch('/api/photo-correction/straighten',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image}),signal});
+  let payload;try{payload=await response.json()}catch{throw Error('비율 자동 조정 서버 응답을 읽지 못했어요.')}
+  if(!response.ok)throw Error(payload.message||'비율 자동 조정을 완료하지 못했어요.');
+  if(typeof payload.image!=='string'||!/^data:image\/(?:png|jpeg);base64,/.test(payload.image))throw Error('유효한 보정 사진을 받지 못했어요.');
+  const result=await loadImage(payload.image),width=result.naturalWidth||result.width,height=result.naturalHeight||result.height;
+  if(width<16||height<16||width*height>40e6)throw Error('보정 사진의 크기를 확인하지 못했어요.');
+  const scale=Math.min(1,2400/Math.max(width,height)),output=document.createElement('canvas');output.width=Math.max(1,Math.round(width*scale));output.height=Math.max(1,Math.round(height*scale));
+  const context=output.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,output.width,output.height);context.drawImage(result,0,0,output.width,output.height);return output;
+}
+async function startAutoStraighten(){
+  if(!ed||ed.remoteJob||!finishPendingEdits())return;
+  if(typeof location!=='undefined'&&location.protocol==='file:'){ed.straightenError=true;ed.straightenMessage='Start-Munji.cmd로 실행하거나 온라인 문지에서 비율 자동 조정을 사용해 주세요.';syncStraightenUI();return}
+  const session=ed,before=ex.getImageData(0,0,ec.width,ec.height),beforeURL=ec.toDataURL();
+  let image=beforeURL;if(image.length>14e6)image=ec.toDataURL('image/jpeg',.98);
+  if(image.length>14e6){session.straightenError=true;session.straightenMessage='사진 용량이 너무 커요. 사진 크기를 줄여 다시 시도해 주세요.';syncStraightenUI();return}
+  session.tool=null;session.straightenError=false;session.straightenMessage='';
+  const job={kind:'straighten',controller:new AbortController(),timedOut:false};session.remoteJob=job;
+  const timer=setTimeout(()=>{job.timedOut=true;job.controller.abort()},125000);syncEditorTools();syncCleanupUI();
+  try{
+    const output=await requestStraightenedImage(image,job.controller.signal);
+    if(ed!==session||session.remoteJob!==job||job.controller.signal.aborted)return;
+    const after=output.getContext('2d').getImageData(0,0,output.width,output.height);
+    drawEditorPixels(after);resetCleanupGeometry();session.straightenComparison={before,after,view:'result'};pushEditorHistory(beforeURL);
+    session.straightenMessage='비율 자동 조정을 완료했어요. 조정 전후를 비교하거나 자르기·기울기를 더 다듬을 수 있어요.';toast('비율 자동 조정 결과를 반영했어요.');
+  }catch(error){
+    if(ed===session&&session.remoteJob===job){session.straightenError=!job.controller.signal.aborted||job.timedOut;session.straightenMessage=job.controller.signal.aborted?(job.timedOut?'비율 자동 조정 시간이 초과됐어요. 현재 사진은 유지됩니다.':'비율 자동 조정을 중단했어요. 현재 사진은 유지됩니다.'):(error.message||'비율 자동 조정에 실패했어요.')+' 현재 사진은 유지됩니다.';}
+  }finally{clearTimeout(timer);if(ed===session&&session.remoteJob===job){session.remoteJob=null;syncCleanupUI();syncEditorTools()}}
+}
+$('#auto-straighten').onclick=startAutoStraighten;
+$('#auto-straighten-stop').onclick=()=>ed?.remoteJob?.controller.abort();
+$('#auto-straighten-manual').onclick=()=>setEditorTool('crop');
+$$('[data-straighten-view]').forEach(button=>button.onclick=()=>showStraightenComparison(button.dataset.straightenView));
 function cancelHandwritingRemoval(){ed?.remoteJob?.controller.abort()}
 async function startHandwritingRemoval(){
   if(!ed||ed.remoteJob||ed.cleanup.scope==='area'&&!ed.cleanup.rect)return;
   if(!finishPendingEdits())return;
+  ed.straightenComparison=null;ed.straightenMessage='';syncStraightenUI();
   if(typeof location!=='undefined'&&location.protocol==='file:'){
     ed.cleanupError=true;ed.cleanupMessage='Start-Munji.cmd로 문지를 실행한 뒤 필기를 제거해 주세요.';syncCleanupUI();return;
   }
@@ -306,9 +361,18 @@ async function startHandwritingRemoval(){
     if(ed===session&&session.remoteJob===job){session.remoteJob=null;syncCleanupUI();syncEditorTools()}
   }
 }
-function editorRemember(){if(!finishPendingEdits())return false;ed.cleanupComparison=null;syncCleanupUI();pushEditorHistory(ec.toDataURL());return true}
-function syncEditorTools(){if(!ed)return;for(const[id,tool]of[['crop-tool','crop'],['eraser-tool','erase'],['text-tool','text'],['cleanup-select','clean-select'],['cleanup-protect-select','protect-select']])$('#'+id).classList.toggle('auto-button',ed.tool===tool);$('#brush-control').hidden=ed.tool!=='erase';$('#eraser-options').hidden=ed.tool!=='erase';$('#text-options').hidden=ed.tool!=='text';$('#brush-cursor').hidden=true;ec.style.cursor=ed.tool==='erase'?'none':['clean-select','protect-select'].includes(ed.tool)?'crosshair':ed.tool==='text'?'move':'default';$('#editor-hint-text').textContent=ed.tool==='crop'?'주황색 모서리 4개와 흰색 변 조절점 4개를 실제 문서 끝에 맞추세요.':ed.tool==='erase'?'드래그한 범위의 필기를 자동으로 제거해요.':ed.tool==='text'?'내용을 입력한 뒤 사진을 클릭하거나 글상자를 끌어 위치를 정하세요.':ed.tool==='protect-select'?'수식·도형처럼 보존할 영역을 드래그하세요. 해당 획은 제거하지 않아요.':ed.tool==='clean-select'?'연필이나 필기를 지울 영역을 드래그하세요. 선택한 범위에 필기 제거를 적용해요.':'텍스트, 연필 보정, 부분 지우개로 사진을 다듬어 보세요.';$('#perspective-status').hidden=ed.tool!=='crop';$('#perspective-actions').hidden=ed.tool!=='crop';syncEditorUndo()}
-function setEditorTool(tool){if(!ed)return;const next=ed.tool===tool?null:tool;if(ed.perspective){cancelPerspective({silent:true});if(next===null)return}if(!finishPendingEdits())return;ed.cleanupComparison=null;syncCleanupUI();ed.tool=next;if(next==='text'){$('#photo-text').value='';ed.textDraft={base:ex.getImageData(0,0,ec.width,ec.height),before:ec.toDataURL(),x:ec.width*.1,y:ec.height*.1,...textDraftOptions()};redrawTextDraft()}if(next==='crop')beginPerspective();syncEditorTools();if(next==='text'){$('#text-options').scrollIntoView?.({block:'nearest'});$('#photo-text').focus?.()}}
+function editorRemember(){if(!finishPendingEdits())return false;ed.cleanupComparison=null;ed.straightenComparison=null;ed.straightenMessage='';syncCleanupUI();pushEditorHistory(ec.toDataURL());return true}
+function syncEditorTools(){
+  if(!ed)return;
+  for(const[id,tool]of[['crop-tool','crop'],['eraser-tool','erase'],['text-tool','text'],['cleanup-select','clean-select'],['cleanup-protect-select','protect-select']]){const button=$('#'+id);button.classList.toggle('auto-button',ed.tool===tool);button.disabled=!!ed.remoteJob}
+  for(const id of ['rotate-tool','reset-photo','apply-adjust'])$('#'+id).disabled=!!ed.remoteJob;
+  $$('[data-filter]').forEach(button=>button.disabled=!!ed.remoteJob);
+  $('#brush-control').hidden=ed.tool!=='erase';$('#eraser-options').hidden=ed.tool!=='erase';$('#text-options').hidden=ed.tool!=='text';$('#brush-cursor').hidden=true;
+  ec.style.cursor=ed.tool==='erase'?'none':['clean-select','protect-select'].includes(ed.tool)?'crosshair':ed.tool==='text'?'move':'default';
+  $('#editor-hint-text').textContent=ed.tool==='crop'?'주황색 모서리 4개와 흰색 변 조절점 4개를 실제 문서 끝에 맞추세요.':ed.tool==='erase'?'드래그한 범위의 필기를 자동으로 제거해요.':ed.tool==='text'?'내용을 입력한 뒤 사진을 클릭하거나 글상자를 끌어 위치를 바꿀 수 있어요.':ed.tool==='protect-select'?'수식·도형처럼 보존할 영역을 드래그하세요. 해당 획은 제거하지 않아요.':ed.tool==='clean-select'?'연필이나 필기를 지울 영역을 드래그하세요. 선택한 범위에 필기 제거를 적용해요.':'비율 자동 조정, 텍스트, 필기 제거로 사진을 다듬어 보세요.';
+  $('#perspective-status').hidden=ed.tool!=='crop';$('#perspective-actions').hidden=ed.tool!=='crop';syncEditorUndo();syncStraightenUI();
+}
+function setEditorTool(tool){if(!ed||ed.remoteJob)return;const next=ed.tool===tool?null:tool;if(ed.perspective){cancelPerspective({silent:true});if(next===null)return}if(!finishPendingEdits())return;ed.cleanupComparison=null;ed.straightenComparison=null;ed.straightenMessage='';syncCleanupUI();ed.tool=next;if(next==='text'){$('#photo-text').value='';ed.textDraft={base:ex.getImageData(0,0,ec.width,ec.height),before:ec.toDataURL(),x:ec.width*.1,y:ec.height*.1,...textDraftOptions()};redrawTextDraft()}if(next==='crop')beginPerspective();syncEditorTools();if(next==='text'){$('#text-options').scrollIntoView?.({block:'nearest'});$('#photo-text').focus?.()}}
 async function openEditor(id){cancelHandwritingRemoval();const q=state.questions.find(q=>q.id===id);if(!q)return;let image;try{image=await loadImage(q.src)}catch(error){console.error('문제 사진 읽기 실패',error);toast('문제 사진을 읽지 못했어요. 사진을 다시 추가해 주세요.');return}try{ed={id,history:[],tool:null,rating:q.difficulty,drag:false,textDraft:null,cleanupComparison:null,remoteJob:null,cleanupMessage:'',cleanupError:false,guide:null,cleanup:{scope:'all',rect:null,protectionRects:[]}};setEditorCanvas(image);$('#editor-name').value=q.title;$('#editor-answer').value=q.answer;$('#brightness').value=$('#contrast').value=0;$('#brightness-value').textContent=$('#contrast-value').textContent='0';$('#eraser-mode').value='pencil';$('#brush-size').value=24;$('#photo-text').value='';$('#photo-text-size').value=Math.max(8,Math.min(48,Math.round(ec.width/20),Math.floor((ec.height-12)/1.4)));$('#photo-text-color').value='#242924';$('#photo-text-bold').checked=false;$('#photo-text-background').checked=false;['brightness','contrast','brush-size','photo-text-size'].forEach(id=>paintRange($('#'+id)));$('#editor-stars').innerHTML=starsHTML(ed.rating);$$('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter==='original'));syncEditorTools();syncCleanupUI();const dialog=$('#editor-dialog');if(!dialog.open)dialog.showModal()}catch(error){console.error('사진 보정창 초기화 실패',error);toast('사진 보정창을 열지 못했어요. 새로고침 후 다시 시도해 주세요.')}}
 $('#editor-close').onclick=()=>{cancelPerspective({silent:true});cancelHandwritingRemoval();$('#editor-dialog').close()};$('#editor-dialog').addEventListener('close',()=>{cancelPerspective({silent:true});cancelHandwritingRemoval()});$('#editor-dialog').addEventListener('cancel',()=>{cancelPerspective({silent:true});cancelHandwritingRemoval()});$('#crop-tool').onclick=()=>setEditorTool('crop');$('#eraser-tool').onclick=()=>setEditorTool('erase');$('#text-tool').onclick=()=>setEditorTool('text');$('#cleanup-select').onclick=()=>setEditorTool('clean-select');
 $('#editor-undo').onclick=async()=>{
