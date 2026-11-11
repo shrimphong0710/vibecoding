@@ -75,16 +75,16 @@
   // Compatibility entrypoint: no confirmation means a byte-identical, conservative result.
   function cleanHandwriting(image,options={}){const analysis=analyzeHandwriting(image,options),result=restoreHandwriting(analysis,{confirmedIds:options.confirmedIds||[],stroke:options.stroke});image.data.set(result.data);return image}
   function layoutText(ctx,d,bounds){
-    const size=clamp(Number(d.size)||32,8,120),padding=6,lineHeight=Math.ceil(size*1.4),font=(d.bold?'700 ':'400 ')+size+'px "Noto Sans KR","Malgun Gothic",Arial,sans-serif',maxWidth=Math.max(1,bounds.width-padding*2),lines=[];
+    const size=clamp(Number(d.size)||32,1,2400),padding=6,lineHeight=Math.ceil(size*1.4),family=window.MunjiText?.fontFamily(d.font)||'"Noto Sans KR","Malgun Gothic",Arial,sans-serif',font=(d.bold?'700 ':'400 ')+size+'px '+family,boxWidth=d.width?clamp(Number(d.width)||24,12,bounds.width):bounds.width,maxWidth=Math.max(1,boxWidth-padding*2),lines=[];
     ctx.save();ctx.font=font;
     for(const paragraph of String(d.text||'').replace(/\t/g,'    ').split(/\r?\n/)){
       let line='';for(const ch of paragraph){if(line&&ctx.measureText(line+ch).width>maxWidth){lines.push(line);line=ch}else line+=ch}lines.push(line);
     }
-    const width=Math.ceil(Math.max(1,...lines.map(line=>ctx.measureText(line).width)))+padding*2,height=lines.length*lineHeight+padding*2;ctx.restore();
-    return {lines,font,padding,lineHeight,width,height,x:clamp(Number(d.x)||0,0,Math.max(0,bounds.width-width)),y:clamp(Number(d.y)||0,0,Math.max(0,bounds.height-height)),fits:width<=bounds.width&&height<=bounds.height&&!!String(d.text||'').trim()};
+    const contentWidth=Math.ceil(Math.max(1,...lines.map(line=>ctx.measureText(line).width)))+padding*2,contentHeight=lines.length*lineHeight+padding*2,width=d.width?boxWidth:contentWidth,height=d.height?clamp(Number(d.height)||24,12,bounds.height):contentHeight;ctx.restore();
+    return {lines,font,padding,lineHeight,width,height,x:clamp(Number(d.x)||0,0,Math.max(0,bounds.width-width)),y:clamp(Number(d.y)||0,0,Math.max(0,bounds.height-height)),fits:contentWidth<=width&&contentHeight<=height&&width<=bounds.width&&height<=bounds.height&&!!String(d.text||'').trim()};
   }
   function drawText(ctx,d,layout){
-    ctx.save();ctx.font=layout.font;ctx.textBaseline='top';ctx.textAlign='left';
+    ctx.save();ctx.beginPath();ctx.rect(layout.x,layout.y,layout.width,layout.height);ctx.clip();ctx.font=layout.font;ctx.textBaseline='top';ctx.textAlign='left';
     if(d.background){ctx.fillStyle='#fff';ctx.fillRect(layout.x,layout.y,layout.width,layout.height)}
     ctx.fillStyle=/^#[0-9a-f]{6}$/i.test(d.color)?d.color:'#242924';
     layout.lines.forEach((line,i)=>ctx.fillText(line,layout.x+layout.padding,layout.y+layout.padding+i*layout.lineHeight));ctx.restore();
@@ -124,5 +124,10 @@
     }
     return{width,height,data:out,metrics};
   }
-  window.MunjiPhoto={analyzeHandwriting,restoreHandwriting,cleanHandwriting,layoutText,drawText,orderPerspectivePoints,perspectiveMetrics,correctPerspective};
+  function projectPerspectivePoints(quad,points,width,height){
+    const ordered=orderPerspectivePoints(quad),sx=Math.max(1,...ordered.map(p=>p.x)),sy=Math.max(1,...ordered.map(p=>p.y)),targets=[[0,0],[1,0],[1,1],[0,1]],matrix=[],values=[];
+    ordered.forEach((point,i)=>{const x=point.x/sx,y=point.y/sy,[u,v]=targets[i];matrix.push([x,y,1,0,0,0,-u*x,-u*y],[0,0,0,x,y,1,-v*x,-v*y]);values.push(u,v)});const h=solveLinear(matrix,values);
+    return points.map(point=>{const x=point.x/sx,y=point.y/sy,d=h[6]*x+h[7]*y+1;return{x:(h[0]*x+h[1]*y+h[2])/d*width,y:(h[3]*x+h[4]*y+h[5])/d*height}});
+  }
+  window.MunjiPhoto={analyzeHandwriting,restoreHandwriting,cleanHandwriting,layoutText,drawText,orderPerspectivePoints,perspectiveMetrics,correctPerspective,projectPerspectivePoints};
 })();

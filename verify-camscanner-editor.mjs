@@ -34,7 +34,7 @@ export async function verifyCamScannerEditor({ctx,element,M,createCanvas}){
     assert.equal(calls,comparisonCalls,'comparison never calls the service');
     element('clean-view-before').onclick();element('editor-apply').onclick();
     const saved=await M.loadImage(question.src),savedCanvas=createCanvas(W,H);savedCanvas.getContext('2d').drawImage(saved,0,0);assert.deepEqual(pixels(savedCanvas),pixels(clean),'save result even while before image is displayed');assert.equal(question.original,marked.toDataURL());
-    await reopen();await element('filter-ink').onclick();assert.deepEqual(pixels(editor),pixels(clean),'color handwriting shortcut uses the same direct apply flow');
+    await reopen();await element('cleanup-run').onclick();assert.deepEqual(pixels(editor),pixels(clean),'the main handwriting button keeps the same direct apply flow');
     await undo();assert.deepEqual(pixels(editor),pixels(marked));assert.equal(element('cleanup-comparison').hidden,true,'normal undo restores the source and clears comparison');
     await element('cleanup-run').onclick();element('clean-view-before').onclick();await element('cleanup-run').onclick();
     const upload=createCanvas(W,H);upload.getContext('2d').drawImage(lastUpload,0,0);assert.deepEqual(pixels(upload),pixels(clean),'repeated removal starts from the applied result when before is displayed');await undo();await undo();

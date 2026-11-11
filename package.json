@@ -6,12 +6,13 @@
   "scripts": {
     "start": "node serve.mjs",
     "start:online": "node serve-online.mjs",
-    "check": "node --check dist/photo-tools.js && node --check dist/app.js && node --check dist/export.js",
+    "check": "node --check dist/photo-tools.js && node --check dist/text-studio.js && node --check dist/app.js && node --check dist/export.js",
     "check:online": "npm run check && node --check serve-online.mjs && node --check camscanner-api.mjs",
     "test:online": "node verify-online.mjs",
     "standalone": "node build-standalone.mjs",
     "test:handwriting": "node verify-handwriting.mjs",
     "test:ratio": "node build-sites-worker.mjs && node verify-auto-straighten.mjs && node verify-bulk-viewport.mjs && node verify-preview-gestures.mjs && node verify-a4-gestures.mjs",
-    "test:ratio:live": "node verify-auto-straighten-live.mjs"
+    "test:ratio:live": "node verify-auto-straighten-live.mjs",
+    "test:text": "node verify-text-studio.mjs"
   }
 }

@@ -3,7 +3,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const project=path.dirname(fileURLToPath(import.meta.url));
-const publicFiles=['index.html','style.css','bulk-edit.css','app.js','photo-tools.js','export.js'];
+const publicFiles=['index.html','style.css','bulk-edit.css','app.js','photo-tools.js','text-studio.js','export.js'];
 const assets={};
 for(const name of publicFiles)assets['/'+name]=await readFile(path.join(project,'dist',name),'utf8');
 assets['/']=assets['/index.html'];
