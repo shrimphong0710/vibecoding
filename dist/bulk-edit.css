@@ -38,6 +38,7 @@
 .auto-straighten-section .segmented{margin:10px 0}
 #auto-straighten-stop,#auto-straighten-manual{margin-top:8px}
 .auto-straighten-privacy{margin:12px 0 0;color:#88917f;font-size:9px;line-height:1.7}
+#auto-straighten-status:empty,#cleanup-status:empty,#text-draft-status:empty,#bulk-correction-status:empty,.question-settings-empty:empty{display:none}
 .bulk-auto-straighten{margin:4px 0 7px}
 .editor-body{min-height:0;overflow:hidden}
 .editor-workspace{min-width:0;min-height:0;overflow:hidden;position:relative}
