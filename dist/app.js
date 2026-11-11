@@ -91,7 +91,7 @@ function syncPerspectiveOverlay(){
   $('#perspective-mask').setAttribute('d',`M0 0H${ec.width}V${ec.height}H0Z${outline}`);
   const handles=[...q,perspectiveMid(q[0],q[1]),perspectiveMid(q[1],q[2]),perspectiveMid(q[2],q[3]),perspectiveMid(q[3],q[0])];
   handles.forEach((point,i)=>{const handle=$('#perspective-handle-'+i);handle.style.left=(point.x/ec.width*canvasRect.width)+'px';handle.style.top=(point.y/ec.height*canvasRect.height)+'px';handle.setAttribute('aria-valuetext',`${Math.round(point.x)}, ${Math.round(point.y)}`)});
-  const metrics=photoTools.perspectiveMetrics(q);$('#perspective-status').textContent=`${metrics.width} × ${metrics.height}px · 기울기 ${metrics.angle.toFixed(1)}° · 원근 ${metrics.perspective}%`;
+  const metrics=photoTools.perspectiveMetrics(q);$('#perspective-status').textContent=`${metrics.width} × ${metrics.height}px · 입력 ${metrics.angle.toFixed(1)}° → 결과 0° · 수평/수직 보정`;
 }
 function schedulePerspectivePreview(precise=false){
   const session=ed,p=session?.perspective;if(!p)return;
@@ -125,7 +125,7 @@ function applyPerspectiveCorrection(){
   requestAnimationFrame(()=>setTimeout(()=>{
     try{
       if(ed!==session||session.perspective!==p)return;
-      const corrected=photoTools.correctPerspective(p.base,p.points,{maxDimension:4096});ec.width=corrected.width;ec.height=corrected.height;ex.putImageData(new ImageData(corrected.data,corrected.width,corrected.height),0,0);pushEditorHistory(p.beforeURL);finishPerspectiveMode();resetCleanupGeometry();toast('문서를 정면으로 펴고 바깥 배경을 잘라냈어요.');
+      const corrected=photoTools.correctPerspective(p.base,p.points,{maxDimension:4096});ec.width=corrected.width;ec.height=corrected.height;ex.putImageData(new ImageData(corrected.data,corrected.width,corrected.height),0,0);pushEditorHistory(p.beforeURL);finishPerspectiveMode();resetCleanupGeometry();toast('문서의 위·아래는 수평, 좌·우는 수직으로 펴고 바깥 배경을 잘랐어요.');
     }catch(error){console.error('원근 보정 실패',error);p.applying=false;$('#perspective-apply').disabled=$('#perspective-cancel').disabled=false;syncPerspectiveOverlay();toast(error.message||'원근 보정을 적용하지 못했어요.')}
   },25));
 }

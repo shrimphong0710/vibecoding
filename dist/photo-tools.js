@@ -89,12 +89,19 @@
     ctx.fillStyle=/^#[0-9a-f]{6}$/i.test(d.color)?d.color:'#242924';
     layout.lines.forEach((line,i)=>ctx.fillText(line,layout.x+layout.padding,layout.y+layout.padding+i*layout.lineHeight));ctx.restore();
   }
-  function perspectiveMetrics(points){
+  function orderPerspectivePoints(points){
     if(!Array.isArray(points)||points.length!==4||points.some(p=>!Number.isFinite(p?.x)||!Number.isFinite(p?.y)))throw Error('문서의 네 모서리를 확인해 주세요.');
-    const distance=(a,b)=>Math.hypot(b.x-a.x,b.y-a.y),top=distance(points[0],points[1]),right=distance(points[1],points[2]),bottom=distance(points[2],points[3]),left=distance(points[3],points[0]);
-    const width=Math.max(2,Math.round(Math.max(top,bottom))),height=Math.max(2,Math.round(Math.max(left,right))),angle=Math.atan2(points[1].y-points[0].y,points[1].x-points[0].x)*180/Math.PI;
+    const cx=points.reduce((sum,p)=>sum+p.x,0)/4,cy=points.reduce((sum,p)=>sum+p.y,0)/4;
+    let ordered=points.map(p=>({x:p.x,y:p.y})).sort((a,b)=>Math.atan2(a.y-cy,a.x-cx)-Math.atan2(b.y-cy,b.x-cx));
+    const start=ordered.reduce((best,p,i)=>p.x+p.y<ordered[best].x+ordered[best].y?i:best,0);ordered=[...ordered.slice(start),...ordered.slice(0,start)];
+    const area=ordered.reduce((sum,p,i)=>sum+p.x*ordered[(i+1)%4].y-p.y*ordered[(i+1)%4].x,0);if(area<0)ordered=[ordered[0],ordered[3],ordered[2],ordered[1]];
+    return ordered;
+  }
+  function perspectiveMetrics(points){
+    const ordered=orderPerspectivePoints(points),distance=(a,b)=>Math.hypot(b.x-a.x,b.y-a.y),top=distance(ordered[0],ordered[1]),right=distance(ordered[1],ordered[2]),bottom=distance(ordered[2],ordered[3]),left=distance(ordered[3],ordered[0]);
+    const width=Math.max(2,Math.round(Math.max(top,bottom))),height=Math.max(2,Math.round(Math.max(left,right))),angle=Math.atan2(ordered[1].y-ordered[0].y,ordered[1].x-ordered[0].x)*180/Math.PI;
     const horizontal=Math.abs(top-bottom)/Math.max(1,Math.max(top,bottom)),vertical=Math.abs(left-right)/Math.max(1,Math.max(left,right));
-    return{width,height,angle,perspective:Math.round(Math.max(horizontal,vertical)*100),edges:{top,right,bottom,left}};
+    return{width,height,angle,perspective:Math.round(Math.max(horizontal,vertical)*100),edges:{top,right,bottom,left},orderedPoints:ordered};
   }
   function solveLinear(matrix,values){
     const n=values.length,a=matrix.map((row,i)=>[...row,values[i]]);
@@ -107,15 +114,15 @@
     return a.map(row=>row[n]);
   }
   function correctPerspective(image,points,options={}){
-    validateImage(image);const metrics=perspectiveMetrics(points),limit=clamp(Math.round(Number(options.maxDimension)||2400),256,4096),scale=Math.min(1,limit/Math.max(metrics.width,metrics.height)),width=Math.max(2,Math.round(metrics.width*scale)),height=Math.max(2,Math.round(metrics.height*scale));
-    const targets=[{x:0,y:0},{x:width-1,y:0},{x:width-1,y:height-1},{x:0,y:height-1}],matrix=[],values=[];
-    for(let i=0;i<4;i++){const u=targets[i].x,v=targets[i].y,x=points[i].x,y=points[i].y;matrix.push([u,v,1,0,0,0,-x*u,-x*v],[0,0,0,u,v,1,-y*u,-y*v]);values.push(x,y)}
-    const h=solveLinear(matrix,values),source=image.data,out=new Uint8ClampedArray(width*height*4),sw=image.width,sh=image.height;
+    validateImage(image);const metrics=perspectiveMetrics(points),ordered=metrics.orderedPoints,limit=clamp(Math.round(Number(options.maxDimension)||2400),256,4096),scale=Math.min(1,limit/Math.max(metrics.width,metrics.height)),width=Math.max(2,Math.round(metrics.width*scale)),height=Math.max(2,Math.round(metrics.height*scale)),sw=image.width,sh=image.height;
+    const targets=[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}],matrix=[],values=[];
+    for(let i=0;i<4;i++){const u=targets[i].x,v=targets[i].y,x=ordered[i].x/Math.max(1,sw-1),y=ordered[i].y/Math.max(1,sh-1);matrix.push([u,v,1,0,0,0,-x*u,-x*v],[0,0,0,u,v,1,-y*u,-y*v]);values.push(x,y)}
+    const h=solveLinear(matrix,values),source=image.data,out=new Uint8ClampedArray(width*height*4);
     for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-      const denominator=h[6]*x+h[7]*y+1,sx=clamp((h[0]*x+h[1]*y+h[2])/denominator,0,sw-1),sy=clamp((h[3]*x+h[4]*y+h[5])/denominator,0,sh-1),x0=Math.floor(sx),y0=Math.floor(sy),x1=Math.min(sw-1,x0+1),y1=Math.min(sh-1,y0+1),dx=sx-x0,dy=sy-y0,di=(y*width+x)*4,i00=(y0*sw+x0)*4,i10=(y0*sw+x1)*4,i01=(y1*sw+x0)*4,i11=(y1*sw+x1)*4;
+      const u=x/Math.max(1,width-1),v=y/Math.max(1,height-1),denominator=h[6]*u+h[7]*v+1,sx=clamp((h[0]*u+h[1]*v+h[2])/denominator*(sw-1),0,sw-1),sy=clamp((h[3]*u+h[4]*v+h[5])/denominator*(sh-1),0,sh-1),x0=Math.floor(sx),y0=Math.floor(sy),x1=Math.min(sw-1,x0+1),y1=Math.min(sh-1,y0+1),dx=sx-x0,dy=sy-y0,di=(y*width+x)*4,i00=(y0*sw+x0)*4,i10=(y0*sw+x1)*4,i01=(y1*sw+x0)*4,i11=(y1*sw+x1)*4;
       for(let channel=0;channel<4;channel++)out[di+channel]=Math.round((source[i00+channel]*(1-dx)+source[i10+channel]*dx)*(1-dy)+(source[i01+channel]*(1-dx)+source[i11+channel]*dx)*dy);
     }
     return{width,height,data:out,metrics};
   }
-  window.MunjiPhoto={analyzeHandwriting,restoreHandwriting,cleanHandwriting,layoutText,drawText,perspectiveMetrics,correctPerspective};
+  window.MunjiPhoto={analyzeHandwriting,restoreHandwriting,cleanHandwriting,layoutText,drawText,orderPerspectivePoints,perspectiveMetrics,correctPerspective};
 })();
