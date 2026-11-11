@@ -41,12 +41,15 @@ async function eraseWithCamScanner(image,signal){
     input=await fileId(await post('upload_file/execute',{headers:{'Content-Type':'application/octet-stream'},body:bytes}));
     output=await fileId(await post('enhance_image/execute',{headers:{'Content-Type':'application/json'},body:JSON.stringify({file_id:input,enhance_mode:9,output_mode:'file_id'})}));
     response=await post('download_file/execute?response_mode=raw',{headers:{'Content-Type':'application/json'},body:JSON.stringify({file_id:output})});await requireSuccess(response);
-  }catch(error){if(error instanceof ServiceError)throw error;if(signal.aborted)throw new ServiceError('CamScanner 처리 시간이 초과됐어요. 원본은 유지됩니다.',504,'TIMEOUT');throw new ServiceError('CamScanner에 접속하지 못했어요. 잠시 뒤 다시 시도해 주세요.',502,'CONNECTION_FAILED')}
+  }catch(error){if(error instanceof ServiceError)throw error;console.error('CamScanner fetch failed',error?.name,error?.message,error?.cause?.message);if(signal.aborted)throw new ServiceError('CamScanner 처리 시간이 초과됐어요. 원본은 유지됩니다.',504,'TIMEOUT');throw new ServiceError('CamScanner에 접속하지 못했어요. 잠시 뒤 다시 시도해 주세요.',502,'CONNECTION_FAILED')}
   const result=await limitedBytes(response,20*1024*1024),mime=mimeOf(result);if(!mime)throw new ServiceError('CamScanner가 유효한 결과 사진을 반환하지 않았어요.');
   return{image:'data:'+mime+';base64,'+encodeBase64(result),provider:'CamScanner'};
 }
 async function handleApi(request,url){
   if(request.method==='GET'&&url.pathname==='/api/camscanner/status')return json(200,{provider:'CamScanner',requiresApiKey:false,workflow:'upload-enhance-download',mode:9});
+  if(request.method==='GET'&&url.pathname==='/api/camscanner/connectivity'){
+    try{const response=await fetch(CAMSCANNER_ORIGIN,{method:'HEAD'});return json(200,{reachable:true,httpStatus:response.status})}catch(error){console.error('CamScanner connectivity failed',error?.name,error?.message,error?.cause?.message);return json(502,{reachable:false,error:error?.name,message:error?.message,cause:error?.cause?.message})}
+  }
   if(request.method!=='POST'||url.pathname!=='/api/camscanner/erase')return json(404,{error:'NOT_FOUND'});
   if(request.headers.get('Origin')!==url.origin)throw new ServiceError('문지 화면에서 다시 시도해 주세요.',403,'FORBIDDEN_ORIGIN');
   if(busy)throw new ServiceError('이전 사진을 처리 중이에요. 완료된 뒤 다시 시도해 주세요.',409,'BUSY');
