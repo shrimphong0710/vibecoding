@@ -396,19 +396,32 @@ function sheetMetrics(s=state.settings){
   const px=794/210,m=s.margin*px,g=s.gap*px,footerHeight=18,footerTop=1123-m-footerHeight;
   return{px,m,g,cw:(794-2*m-(s.columns-1)*g)/s.columns,headerHeight:62,titleTop:12,titleSize:22,titleHeight:28,infoTop:46,top:m+74,limit:footerTop-8,questionHead:22,questionTail:12,answerHeight:20,emptyAnswerHeight:8,rowGap:14,footerTop,footerHeight};
 }
+function repackPageColumns(items,metrics){
+  const {m,cw,g,top,limit,rowGap}=metrics,precision=16,capacity=Math.floor((limit-top+rowGap)*precision),weights=items.map(item=>Math.ceil((item.h+rowGap)*precision-1e-7)),total=weights.reduce((sum,value)=>sum+value,0);
+  if(total>capacity*2)return null;
+  // Search both columns before opening another page. Rounding upward by at
+  // most 1/16 px keeps the search small without risking overlapping items.
+  const choices=new Int32Array(capacity+1);choices.fill(-1);choices[0]=-2;
+  for(let i=0;i<weights.length;i++)for(let sum=capacity;sum>=weights[i];sum--)if(choices[sum]===-1&&choices[sum-weights[i]]!==-1)choices[sum]=i;
+  let target=capacity;while(target>=Math.max(0,total-capacity)&&choices[target]===-1)target--;
+  if(target<Math.max(0,total-capacity))return null;
+  const left=new Set();while(target>0){const index=choices[target];left.add(index);target-=weights[index]}
+  const firstOnLeft=left.has(0),bottoms=[top,top];items.forEach((item,index)=>{const column=left.has(index)===firstOnLeft?0:1;item.x=m+column*(cw+g);item.y=bottoms[column];bottoms[column]+=item.h+rowGap});return bottoms;
+}
 function getLayout(){
-  const s=state.settings,{px,m,cw,top,limit,questionHead,questionTail,answerHeight,emptyAnswerHeight,rowGap,g}=sheetMetrics();
-  let list=[],page={items:[],answerKey:false},y=top,row=[],rowHeight=0;
-  const pushPage=()=>{if(page.items.length)list.push(page);page={items:[],answerKey:false};y=top;row=[];rowHeight=0};
+  const s=state.settings,metrics=sheetMetrics(),{px,m,cw,top,limit,questionHead,questionTail,answerHeight,emptyAnswerHeight,rowGap,g}=metrics;
+  let list=[],page={items:[],answerKey:false},bottoms=Array(s.columns).fill(top);
+  const pushPage=()=>{if(page.items.length)list.push(page);page={items:[],answerKey:false};bottoms=Array(s.columns).fill(top)};
   for(let i=0;i<state.questions.length;i++){
     const q=state.questions[i];if(q.breakBefore&&page.items.length)pushPage();
     let iw=cw*q.scale/100,ih=q.height/q.width*iw;
     const space=s.solution?(q.solution??s.solutionSpace)*px:0,maxH=limit-top,overhead=questionHead+space+(s.answerLine?answerHeight:emptyAnswerHeight)+questionTail;
     ih=Math.min(ih,Math.max(40,maxH-overhead));let h=ih+overhead;
     if(h>maxH){h=maxH;ih=Math.max(30,h-overhead)}
-    if(row.length===s.columns){y+=rowHeight+rowGap;row=[];rowHeight=0}
-    if(y+h>limit&&page.items.length)pushPage();
-    const col=row.length,item={q,index:i,x:m+col*(cw+g),y,w:cw,h,iw,ih,space};page.items.push(item);row.push(item);rowHeight=Math.max(rowHeight,h);
+    const item={q,index:i,x:m,y:top,w:cw,h,iw,ih,space};let column=bottoms.findIndex(bottom=>bottom+h<=limit+1e-7);
+    if(column===-1&&s.columns===2){const packed=repackPageColumns([...page.items,item],metrics);if(packed){bottoms=packed;page.items.push(item);continue}}
+    if(column===-1){pushPage();column=0}
+    item.x=m+column*(cw+g);item.y=bottoms[column];page.items.push(item);bottoms[column]+=h+rowGap;
   }
   if(page.items.length)list.push(page);
   if(s.answerKey&&state.questions.length){
