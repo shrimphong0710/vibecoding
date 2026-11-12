@@ -32,7 +32,7 @@ zoom();const panBefore={left:stage.scrollLeft,top:stage.scrollTop};await pointer
 assert.equal(JSON.stringify(M.state),savedState);assert.equal(JSON.stringify(M.pages),savedLayout);assert.equal(run('undoStack.length'),0);assert.equal(run('sheetTestRenders'),0,'pinch only updates page scaling, without rebuilding document or question lists');
 
 zoom(.6);await fire('canvas-stage','gesturestart',event({scale:1,clientX:240,clientY:200}));await fire('canvas-stage','gesturechange',event({scale:1.5,clientX:240,clientY:200}));assert.ok(Math.abs(run('zoom')-.9)<.001);await wheel({ctrlKey:true,deltaY:-20});assert.ok(Math.abs(run('zoom')-.9)<.001);await fire('canvas-stage','gestureend',event());await wheel({ctrlKey:true,deltaY:10});assert.ok(run('zoom')<.9);
-await wheel({ctrlKey:true,deltaY:-1000,deltaMode:1});assert.equal(run('zoom'),1.5);for(let i=0;i<5;i++)await wheel({ctrlKey:true,deltaY:1000});assert.equal(run('zoom'),.25);
+for(let i=0;i<3;i++)await wheel({ctrlKey:true,deltaY:-1000,deltaMode:1});assert.equal(run('zoom'),5);assert.equal(element('zoom-value').textContent,'500%');for(let i=0;i<5;i++)await wheel({ctrlKey:true,deltaY:1000});assert.equal(run('zoom'),.25);
 
 const questionNode=element('test-question-target');questionNode.dataset.id=questions[1].id;questionNode.closest=selector=>['.paper-question','[data-id]'].includes(selector)?questionNode:null;
 await pointer('pointerdown',10,220,200);await pointer('pointerup',10,220,200);const tap=event({target:questionNode});await fire('canvas-stage','click',tap);assert.equal(tap.stopped,false);await fire('paper-stack','click',tap);assert.equal(run('selected'),questions[1].id,'normal touch still selects a question');

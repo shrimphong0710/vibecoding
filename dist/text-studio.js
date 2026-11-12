@@ -27,6 +27,34 @@
     return values.map((box,index)=>({id:String(box?.id||'text-'+index).replace(/[^a-z0-9_-]/gi,'').slice(0,100)||'text-'+index,text:String(box?.text||'').slice(0,2000),font:fonts.some(f=>f.id===box?.font)||userFont(box?.font)?box.font:'sans',size:clamp(Number(box?.size)||32,1,2048),color:/^#[0-9a-f]{6}$/i.test(box?.color)?box.color:'#242924',bold:!!box?.bold,background:!!box?.background,x:clamp(Number(box?.x)||0,0,Math.max(0,width-12)),y:clamp(Number(box?.y)||0,0,Math.max(0,height-12)),width:clamp(Number(box?.width)||Math.min(400,width),12,width),height:clamp(Number(box?.height)||Math.min(100,height),12,height),rotation:[0,90,180,270].includes(box?.rotation)?box.rotation:0}));
   }
   const loadedFonts=new Map();
+  const symbolGroups=[
+    {name:'연산',symbols:['+','−','×','÷','±','∓','=','≠','≈','≡','∝','%','‰','·','∗','∘','√','∛','∜','∞']},
+    {name:'관계·논리',symbols:['<','>','≤','≥','≪','≫','∴','∵','∠','⊥','∥','∦','∧','∨','¬','∀','∃','∄','⇒','⇔']},
+    {name:'집합',symbols:['∈','∉','∋','∌','⊂','⊃','⊄','⊆','⊇','∪','∩','∅','ℕ','ℤ','ℚ','ℝ','ℂ']},
+    {name:'미적분·함수',symbols:['∑','∏','∫','∬','∭','∮','∂','∇','∆','lim','log','ln','sin','cos','tan','f(x)','→','↦']},
+    {name:'그리스 소문자',symbols:['α','β','γ','δ','ε','ζ','η','θ','ι','κ','λ','μ','ν','ξ','π','ρ','σ','τ','φ','χ','ψ','ω']},
+    {name:'그리스 대문자',symbols:['Γ','Δ','Θ','Λ','Ξ','Π','Σ','Φ','Ψ','Ω']},
+    {name:'기하·단위',symbols:['△','▲','▽','▼','□','■','○','●','⊙','⌒','°','′','″','ℓ','㎜','㎝','㎡','㎥']},
+    {name:'위첨자',symbols:['⁰','¹','²','³','⁴','⁵','⁶','⁷','⁸','⁹','⁺','⁻','⁼','⁽','⁾','ⁿ']},
+    {name:'아래첨자',symbols:['₀','₁','₂','₃','₄','₅','₆','₇','₈','₉','₊','₋','₌','₍','₎']},
+    {name:'분수',symbols:['½','⅓','⅔','¼','¾','⅕','⅖','⅗','⅘','⅙','⅚','⅛','⅜','⅝','⅞']},
+    {name:'화살표',symbols:['←','→','↑','↓','↔','↖','↗','↘','↙','⇐','⇒','⇑','⇓','⇔','↦']},
+    {name:'괄호·기호',symbols:['(',')','[',']','{','}','⟨','⟩','⌈','⌉','⌊','⌋','〈','〉','「','」','『','』','…','※','✓','★','☆']}
+  ];
+  const symbolPaletteCss=`
+    .text-symbol-palette{margin:8px 0 13px;border:1px solid #dce6d2;border-radius:7px;background:#fff;overflow:hidden}
+    .text-symbol-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 9px;background:#f1f6eb;border-bottom:1px solid #e2ead9;color:#617653;font-size:10px;font-weight:700}
+    .text-symbol-heading small{color:#94a28a;font-size:8px;font-weight:400;white-space:nowrap}
+    .text-symbol-groups{max-height:210px;overflow:auto;padding:7px 8px 9px;scrollbar-width:thin;scrollbar-color:#cbd7c1 transparent}
+    .text-symbol-group+.text-symbol-group{margin-top:8px;padding-top:8px;border-top:1px dashed #e4eadf}
+    .text-symbol-group-label{display:block;margin:0 0 5px;color:#8c9a80;font-size:8px;font-weight:600}
+    .text-symbol-buttons{display:flex;flex-wrap:wrap;gap:4px}
+    .text-symbol-button{display:inline-flex;align-items:center;justify-content:center;min-width:27px;height:27px;padding:0 6px;border:1px solid #dfe7d8;border-radius:5px;background:#fbfdf8;color:#44563c;font:500 13px/1 Arial,"Malgun Gothic",sans-serif;cursor:pointer}
+    .text-symbol-button:hover{border-color:#9db58e;background:#edf5e7;color:#36522c}
+    .text-symbol-button:focus-visible{outline:2px solid #86a675;outline-offset:1px}
+    .text-symbol-button:disabled{opacity:.4;cursor:not-allowed}
+    @media(max-width:600px){.text-symbol-groups{max-height:175px}.text-symbol-button{min-width:30px;height:30px;font-size:14px}}
+  `;
   async function loadFonts(values){
     for(const font of validateFonts(values)){
       const cached=loadedFonts.get(font.id);if(cached?.data===font.data){await cached.promise;continue}
@@ -47,11 +75,24 @@
     const $=id=>document.querySelector('#'+id),overlay=$('text-layer-overlay'),nodes=new Map(),inputs=['photo-text','photo-text-font','photo-text-size','photo-text-size-range','photo-text-color','photo-text-color-hex','photo-text-bold','photo-text-background','photo-text-box-width','photo-text-box-height'];
     const session=()=>getSession(),active=()=>session()?.tool==='text-edit',frame=()=>session()?.textFrame||{width:canvas.width,height:canvas.height};
     let composing=false;
+    function ensureSymbolPalette(){
+      let style=$('text-symbol-palette-style');if(!style){style=document.createElement('style');style.id='text-symbol-palette-style';style.textContent=symbolPaletteCss;document.head.append(style)}
+      let palette=$('text-symbol-palette');if(!palette){palette=document.createElement('div');palette.id='text-symbol-palette';palette.className='text-symbol-palette';palette.setAttribute('role','group');palette.setAttribute('aria-label','수학 및 특수문자 입력');$('photo-text').insertAdjacentElement('afterend',palette)}
+      palette.innerHTML='<div class="text-symbol-heading"><span>수학 · 특수문자</span><small>누르면 바로 입력</small></div><div class="text-symbol-groups">'+symbolGroups.map(group=>'<section class="text-symbol-group"><span class="text-symbol-group-label">'+escape(group.name)+'</span><div class="text-symbol-buttons">'+group.symbols.map(symbol=>'<button type="button" class="text-symbol-button" data-text-symbol="'+escape(symbol)+'" title="'+escape(symbol)+' 입력">'+escape(symbol)+'</button>').join('')+'</div></section>').join('')+'</div>';
+      return palette;
+    }
+    const symbolPalette=ensureSymbolPalette();
+    function insertTextSymbol(symbol){
+      const ed=session(),input=$('photo-text');if(!ed?.textDraft||ed.remoteJob||input.disabled||composing||!symbol)return;
+      const value=String(input.value||''),start=clamp(Number.isFinite(input.selectionStart)?input.selectionStart:value.length,0,value.length),end=clamp(Number.isFinite(input.selectionEnd)?input.selectionEnd:start,start,value.length),room=2000-(value.length-(end-start)),insert=String(symbol).slice(0,Math.max(0,room));if(!insert)return;
+      input.value=value.slice(0,start)+insert+value.slice(end);const caret=start+insert.length;input.focus?.();input.setSelectionRange?.(caret,caret);redraw();
+    }
+    symbolPalette.onclick=event=>{const button=event.target.closest?.('[data-text-symbol]');if(button){event.preventDefault?.();insertTextSymbol(button.dataset.textSymbol)}};
     function snapshot(){return{layers:copy(session()?.textLayers||[]),frame:{...frame()}}}
     function restore(value){const ed=session();composing=false;ed.textLayers=copy(value?.layers||[]);ed.textFrame=value?.frame?{...value.frame}:{width:canvas.width,height:canvas.height};ed.textDraft=null;ed.textDrag=null;render()}
     function init(question){restore({layers:validateBoxes(question.textBoxes,question.textFrame?.width||question.width,question.textFrame?.height||question.height),frame:question.textFrame||{width:canvas.width,height:canvas.height}});fontOptions();syncControls()}
     function fontOptions(){const selected=$('photo-text-font').value||'arial';$('photo-text-font').innerHTML=[...fonts,...(getFonts()||[])].map(font=>'<option value="'+escape(font.id)+'">'+escape(font.name)+'</option>').join('');$('photo-text-font').value=selected}
-    function syncControls(){const ed=session(),draft=ed?.textDraft;for(const id of inputs)$(id).disabled=!draft||!!ed.remoteJob;$('text-delete').disabled=!draft||!!ed?.remoteJob;$('text-commit').disabled=!draft||!draft.layout?.fits;$('text-cancel').disabled=!draft;}
+    function syncControls(){const ed=session(),draft=ed?.textDraft,disabled=!draft||!!ed?.remoteJob;for(const id of inputs)$(id).disabled=disabled;$('text-delete').disabled=disabled;$('text-commit').disabled=!draft||!draft.layout?.fits;$('text-cancel').disabled=!draft;symbolPalette.setAttribute('aria-disabled',String(disabled));symbolPalette.querySelectorAll?.('[data-text-symbol]').forEach(button=>button.disabled=disabled);}
     function visible(){const ed=session(),items=(ed?.textLayers||[]).filter(box=>box.id!==ed?.textDraft?.id).map(box=>mapped(box,frame(),canvas.width,canvas.height));if(ed?.textDraft)items.push(ed.textDraft);return items}
     function render(){
       const ed=session();if(!ed)return;const editing=active()&&!ed.remoteJob,items=visible(),ids=new Set(items.map(box=>box.id));

@@ -196,7 +196,7 @@ function sheetViewportAnchor(clientX,clientY){
 function setZoom(value,focus=null){
   if(!Number.isFinite(value))return;
   const stage=$('#canvas-stage'),stageRect=stage.getBoundingClientRect(),clientX=Number.isFinite(focus?.clientX)?focus.clientX:stageRect.left+stage.clientWidth/2,clientY=Number.isFinite(focus?.clientY)?focus.clientY:stageRect.top+stage.clientHeight/2,anchor=focus?.anchor||sheetViewportAnchor(clientX,clientY);
-  autoFit=false;zoom=Math.max(.25,Math.min(1.5,value));
+  autoFit=false;zoom=Math.max(.25,Math.min(5,value));
   const wrappers=$$('#paper-stack > .paper-wrapper');
   if(wrappers.length){for(const wrapper of wrappers){wrapper.style.width=794*zoom+'px';wrapper.style.height=1123*zoom+'px';wrapper.querySelector('.paper').style.transform='scale('+zoom+')'}}else renderPreview();
   $('#zoom-value').textContent=Math.round(zoom*100)+'%';
@@ -288,7 +288,7 @@ function syncEditorViewport(){
   if(editorAutoFit&&wrap.clientWidth>40&&wrap.clientHeight>40)editorZoom=Math.max(.05,Math.min(1,(wrap.clientWidth-40)/ec.width,(wrap.clientHeight-40)/ec.height));
   surface.style.width=Math.max(1,Math.round(ec.width*editorZoom))+'px';surface.style.height=Math.max(1,Math.round(ec.height*editorZoom))+'px';
   $('#editor-zoom-range').value=String(Math.round(editorZoom*100));$('#editor-zoom-value').textContent=Math.round(editorZoom*100)+'%';
-  $('#editor-zoom-out').disabled=editorZoom<=.05;$('#editor-zoom-in').disabled=editorZoom>=2;
+  $('#editor-zoom-out').disabled=editorZoom<=.05;$('#editor-zoom-in').disabled=editorZoom>=5;
   $('#editor-zoom-fit').classList.toggle('active',editorAutoFit);$('#editor-zoom-fit').setAttribute('aria-pressed',String(editorAutoFit));
   if(ed.perspective)syncPerspectiveOverlay();
   textStudio.render();
@@ -300,11 +300,12 @@ function editorViewportAnchor(clientX,clientY){
 function setEditorZoom(value,focus=null){
   if(!ed||!Number.isFinite(value))return;
   const wrap=$('#editor-canvas-wrap'),wrapRect=wrap.getBoundingClientRect(),clientX=Number.isFinite(focus?.clientX)?focus.clientX:wrapRect.left+wrap.clientWidth/2,clientY=Number.isFinite(focus?.clientY)?focus.clientY:wrapRect.top+wrap.clientHeight/2,anchor=focus?.anchor||editorViewportAnchor(clientX,clientY);
-  editorAutoFit=false;editorZoom=Math.max(.05,Math.min(2,value));syncEditorViewport();
+  editorAutoFit=false;editorZoom=Math.max(.05,Math.min(5,value));syncEditorViewport();
   const rect=ec.getBoundingClientRect();wrap.scrollLeft=Math.max(0,wrap.scrollLeft+rect.left+rect.width*anchor.x-clientX);wrap.scrollTop=Math.max(0,wrap.scrollTop+rect.top+rect.height*anchor.y-clientY);
 }
 $('#editor-zoom-out').onclick=()=>setEditorZoom(editorZoom/1.2);
 $('#editor-zoom-in').onclick=()=>setEditorZoom(editorZoom*1.2);
+$('#editor-zoom-range').max='500';
 $('#editor-zoom-range').oninput=event=>setEditorZoom(+event.target.value/100);
 $('#editor-zoom-actual').onclick=()=>setEditorZoom(1);
 $('#editor-zoom-fit').onclick=()=>{editorAutoFit=true;syncEditorViewport();$('#editor-canvas-wrap').scrollLeft=$('#editor-canvas-wrap').scrollTop=0};
